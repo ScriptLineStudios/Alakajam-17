@@ -12,6 +12,9 @@ class Tile:
         self.rect = rect
         self.image = image
 
+    def h(self):
+        return (self.rect.x, self.rect.y)
+
 def deserialize(fi):
     with open(fi, "rb") as f:
         return [Tile(self.assets.load_image(tile.name), tile.rect) for tile in pickle.load(f)]
@@ -22,7 +25,9 @@ class Editor:
         self.clock = pygame.time.Clock()
         self.assets = Assets("assets")
         self.tiles = []
-        with open("map.bin", "rb") as f:
+        self.map = "map4.bin"
+
+        with open(self.map, "rb") as f:
             self.tiles = [Tile(self.assets.load_image(tile.name), tile.rect) for tile in pickle.load(f)]
         self.draw = False
         self.erase = False
@@ -35,6 +40,15 @@ class Editor:
             self.assets.load_image("right_full"),
             self.assets.load_image("left_full"),
             self.assets.load_image("bg"),
+            self.assets.load_image("spike"),
+            self.assets.load_image("grass"),
+            self.assets.load_image("grass_inside"),
+            self.assets.load_image("vine"),
+            self.assets.load_image("tree"),
+            self.assets.load_image("dirt"),
+            self.assets.load_image("wall_left_test"),
+            self.assets.load_image("cave"),
+            self.assets.load_image("bug1"),
         ]
 
         self.selected = self.images[0]
@@ -45,14 +59,14 @@ class Editor:
     def serialize_tiles(self):
         return [SerialisableTile(tile.image.name, tile.rect) for tile in self.tiles]
 
+
     def update(self):
         while True:
             self.display.fill((0, 0, 0))
 
-
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
-                    with open("map.bin", "wb") as f:
+                    with open(self.map, "wb") as f:
                         pickle.dump(self.serialize_tiles(), f)
                     raise SystemExit
 
@@ -83,10 +97,9 @@ class Editor:
                 if pos[1] > 200:
                     pos[0] -= self.offset.x
                     pos[1] -= self.offset.y
-
-                    self.tiles.append(Tile(self.selected, pygame.Rect((pos[0] // 16) * 16, (pos[1] // 16) * 16, 16, 16)))
-
-
+                    if Tile(self.selected, pygame.Rect((pos[0] // 16) * 16, (pos[1] // 16) * 16, 16, 16)).h() not in [tile.h() for tile in self.tiles]:
+                        self.tiles.append(Tile(self.selected, pygame.Rect((pos[0] // 16) * 16, (pos[1] // 16) * 16, 16, 16)))
+                        print("placed")
             for i, tile in enumerate(self.tiles):
                 pos = pygame.mouse.get_pos()
 
@@ -95,6 +108,7 @@ class Editor:
                         self.tiles.remove(tile)
 
                 self.display.blit(tile.image.surf, (tile.rect.x + self.offset.x, tile.rect.y + self.offset.y, tile.rect.width, tile.rect.height))
+                
 
             pygame.draw.rect(self.display, (100, 100, 100), (0, 0, 800, 200))
             for i, image in enumerate(self.images):

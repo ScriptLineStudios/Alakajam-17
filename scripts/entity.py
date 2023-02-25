@@ -20,6 +20,7 @@ class Entity:
         self.images = images
         self.img_index = 0
         self.anim_time = 8
+        self.alive = True
         self.engine = engine
         self.airtime = 0    
         self.collisions = {"left": False, "right": False}
@@ -41,8 +42,14 @@ class Entity:
     def get_collisions(self, tiles):
         return_list = []
         for tile in tiles:
-            if tile.rect.colliderect(self.rect) and tile.image.name not in ("bush1", "bush2"):
+            if tile.rect.colliderect(self.rect) and tile.image.name not in ("bush1", "bush2", "tree", "bug1"):
                 return_list.append(tile)
+
+                if str(tile) == "Enemy":
+                    self.alive = False
+
+                if tile.image.name == "cave":
+                    self.new_level = True
 
         return return_list
 
