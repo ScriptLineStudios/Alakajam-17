@@ -19,7 +19,7 @@ class Entity:
         self.movement = pygame.Vector2(0, 0)
         self.images = images
         self.img_index = 0
-        self.anim_time = 15
+        self.anim_time = 8
         self.engine = engine
         self.airtime = 0    
         self.collisions = {"left": False, "right": False}

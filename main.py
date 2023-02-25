@@ -29,6 +29,11 @@ class Player(Entity):
         self.vertical_momentum = 0
         self.moving = False
         self.flipped = False
+        self.screenskake_amount = 0
+        self.landed = True
+        self.landcool = 0
+        self.rotation = 0
+        self.offwall = False
         super().__init__(pygame.Rect(18, 250, 14, 16), images=self.game.assets.player_idle)
 
     def pipe_input(self):
@@ -45,13 +50,31 @@ class Player(Entity):
 
         if keys[pygame.K_SPACE]:
             if self.airtime < 4 or self.hoz > 2:
+                self.landed = False
+                if self.hoz > 2:
+                    self.offwall = True
+                    self.screenshake(2)
                 self.vertical_momentum = -5   
 
+        if self.airtime < 2 and not self.landed:
+            self.anim_time = 2
+            self.images = self.game.assets.player_land
 
-        if self.moving:
-            self.images = self.game.assets.player_walk
         else:
-            self.images = self.game.assets.player_idle
+            self.anim_time = 8
+            if self.moving:
+                self.images = self.game.assets.player_walk
+            else:
+                self.images = self.game.assets.player_idle
+
+        if self.images == self.game.assets.player_land:
+            if self.img_index == 13:
+                self.landed = True
+                self.offwall = False
+
+
+    def screenshake(self, amount):
+        self.screenskake_amount = amount
 
     def update(self):
         self.movement = pygame.Vector2(0, 0)
@@ -65,16 +88,32 @@ class Player(Entity):
             self.engine.display.blit(self.game.marker.surf, (self.rect.x - self.camera.x, self.rect.y - self.camera.y - 16))
             self.hoz -= 1
 
+        if self.screenskake_amount > 0:
+            self.camera.x += random.randint(-4, 4)
+            self.camera.y += random.randint(-4, 4)
+            self.screenskake_amount -= 1
 
         self.vertical_momentum += 0.2
         if self.vertical_momentum > 3:
             self.vertical_momentum = 3
 
+        if self.airtime > 0 and self.offwall and not (self.collisions["left"] or self.collisions["right"]):
+            if self.movement.x > 0:
+                self.rotation += 10
+            else:
+                self.rotation -= 10
+        else:
+            self.rotation = 0
+
+        if self.airtime > 0:
+            if self.collisions["left"] or self.collisions["right"]:
+                self.images = self.game.assets.player_onwall
+
         self.airtime +=1
         self.animate()
         self.camera.x += ((self.rect.x - self.camera.x) - 100) / 15
         self.camera.y += ((self.rect.y - self.camera.y) - 80) / 15
-        self.engine.display.blit(pygame.transform.flip(self.image.surf, self.flipped, False), (self.rect.x - self.camera.x, self.rect.y - self.camera.y))
+        self.engine.display.blit(pygame.transform.flip(pygame.transform.rotate(self.image.surf, self.rotation), self.flipped, False), (self.rect.x - self.camera.x, self.rect.y - self.camera.y))
 
 class Game:
     def __init__(self):
@@ -93,6 +132,14 @@ class Game:
                                                     "player_walk2",
                                                     "player_walk3",
                                                     "player_walk4"])
+        self.assets.load_animation("player_land",  ["player_land1",
+                                                    "player_land2",
+                                                    "player_land3",
+                                                    "player_land4",
+                                                    "player_land5",
+                                                    "player_land6",
+                                                    "player_land7"])
+        self.assets.load_animation("player_onwall",  ["player_onwall"])
 
         self.em = EntityManager(self.engine)
         self.player = Player(self)
@@ -117,7 +164,7 @@ class Game:
             self.engine.display.blit(self.mountain.surf, (-10-self.player.camera.x * 0.2, 50-self.player.camera.y * 0.2))
 
             if random.randrange(0, 100) == 10:
-                self.clouds.append([0, 0])
+                self.clouds.append([-50, random.randrange(0,  200)])
 
             for cloud in self.clouds:
                 cloud[0] += 1
@@ -129,7 +176,9 @@ class Game:
 
                 if tile.image.name in ("bush1", "bush2"):
                     if random.randrange(0, 1000) == 2:
-                        self.particles.append([tile.rect.copy(), 100])
+                        self.particles.append([
+                            pygame.Vector2(tile.rect.copy().x + random.randrange(0, 10), tile.rect.copy().y + random.randrange(0, 10)), 100
+                        ])
 
             for particle in self.particles:
                 if self.global_time % 2 == 0:
@@ -141,7 +190,7 @@ class Game:
                 if (particle[1]) < 0:
                     self.particles.remove(particle)
 
-                pygame.draw.rect(self.engine.display, (0, 255, 0), (particle[0].x - self.player.camera.x, particle[0].y - self.player.camera.y, 2, 2))
+                pygame.draw.rect(self.engine.display, (86, 123, 121), (particle[0].x - self.player.camera.x, particle[0].y - self.player.camera.y, 2, 2))
 
 
 
