@@ -12,6 +12,10 @@ class Tile:
         self.rect = rect
         self.image = image
 
+def deserialize(fi):
+    with open(fi, "rb") as f:
+        return [Tile(self.assets.load_image(tile.name), tile.rect) for tile in pickle.load(f)]
+
 class Editor:
     def __init__(self):
         self.display = pygame.display.set_mode((800, 800))
@@ -23,8 +27,14 @@ class Editor:
         self.draw = False
         self.erase = False
         self.images = [
-            self.assets.load_image("block1"),
-            self.assets.load_image("block1"),
+            self.assets.load_image("wall_left"),
+            self.assets.load_image("wall_right"),
+            self.assets.load_image("bottom"),
+            self.assets.load_image("bush1"),
+            self.assets.load_image("bush2"),
+            self.assets.load_image("right_full"),
+            self.assets.load_image("left_full"),
+            self.assets.load_image("bg"),
         ]
 
         self.selected = self.images[0]
@@ -92,6 +102,8 @@ class Editor:
 
                 size = 32
                 if pygame.Rect(i * 42, 16, 32, 32).collidepoint(pos):
+                    if self.draw:
+                        self.selected = image 
                     size = 35
                 else:
                     size = 32
