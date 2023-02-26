@@ -23,7 +23,7 @@ class Entity:
         self.alive = True
         self.engine = engine
         self.airtime = 0    
-        self.collisions = {"left": False, "right": False}
+        self.collisions = {"left": False, "right": False, "bottom": False}
         self.hoz = 0
         self.released = True
 
@@ -42,7 +42,7 @@ class Entity:
     def get_collisions(self, tiles):
         return_list = []
         for tile in tiles:
-            if tile.rect.colliderect(self.rect) and tile.image.name not in ("bush1", "bush2", "tree", "bug1"):
+            if tile.rect.colliderect(self.rect) and tile.image.name not in ("bush1", "bush2", "tree", "bug1", "water1", "water_flow1"):
                 return_list.append(tile)
 
                 if str(tile) == "Enemy":
@@ -54,7 +54,7 @@ class Entity:
         return return_list
 
     def move(self, tiles):
-        self.collisions = {"left": False, "right": False, "hoz": False}
+        self.collisions = {"left": False, "right": False, "hoz": False, "bottom": False}
 
         self.pipe_input()
         self.rect.x += self.movement.x
@@ -79,6 +79,7 @@ class Entity:
         for tile in self.get_collisions(tiles):
             if self.movement.y > 0:
                 self.rect.bottom = tile.rect.top
+                self.collisions["bottom"] = True
                 self.airtime = 0
 
             if self.movement.y < 0:

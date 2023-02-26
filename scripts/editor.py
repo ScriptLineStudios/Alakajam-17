@@ -25,7 +25,7 @@ class Editor:
         self.clock = pygame.time.Clock()
         self.assets = Assets("assets")
         self.tiles = []
-        self.map = "map4.bin"
+        self.map = "map7.bin"
 
         with open(self.map, "rb") as f:
             self.tiles = [Tile(self.assets.load_image(tile.name), tile.rect) for tile in pickle.load(f)]
@@ -49,6 +49,8 @@ class Editor:
             self.assets.load_image("wall_left_test"),
             self.assets.load_image("cave"),
             self.assets.load_image("bug1"),
+            self.assets.load_image("water1"),
+            self.assets.load_image("water_flow1"),
         ]
 
         self.selected = self.images[0]

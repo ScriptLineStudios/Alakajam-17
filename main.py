@@ -3,9 +3,12 @@ import asyncio
 import pickle
 import math
 import random
+import sys
 
-pygame.font.init()
 pygame.init()
+pygame.font.init()
+pygame.mixer.pre_init(frequency=1000)
+# pygame.mixer.init()
 
 from scripts.engine import Engine
 from scripts.assets import Assets
@@ -55,6 +58,30 @@ class Player(Entity):
         self.dash_end_cooldown = 0
         self.dead= False
         self.new_level = False
+
+        if sys.platform == "emscripten":
+            self.dash_sound = pygame.mixer.Sound("assets/powerUp.ogg")
+
+            self.grass_sounds = [pygame.mixer.Sound("assets/grass1.ogg"), pygame.mixer.Sound("assets/grass2.ogg")]
+            self.grass_sounds[0].set_volume(100)
+            self.grass_sounds[1].set_volume(100)
+            self.rock_sound = pygame.mixer.Sound("assets/rock.ogg")
+
+            self.explosion_sound = pygame.mixer.Sound("assets/explosion.ogg")
+            self.explosion_sound.set_volume(0.4)
+        else:
+            self.dash_sound = pygame.mixer.Sound("assets/powerUp.wav")
+
+            self.grass_sounds = [pygame.mixer.Sound("assets/grass1.wav"), pygame.mixer.Sound("assets/grass2.wav")]
+            self.grass_sounds[0].set_volume(100)
+            self.grass_sounds[1].set_volume(100)
+            self.rock_sound = pygame.mixer.Sound("assets/rock.wav")
+
+            self.explosion_sound = pygame.mixer.Sound("assets/explosion.wav")
+            self.explosion_sound.set_volume(0.4)
+
+        self.grass_footstep = 0
+        self.played = 0
         super().__init__(pygame.Rect(self.game.start_positions[self.game.current_level][0], self.game.start_positions[self.game.current_level][1], 16, 16), images=self.game.assets.player_idle)
 
     def pipe_input(self):
@@ -75,13 +102,22 @@ class Player(Entity):
                     self.dash = True
                     self.dash_cooldown = 25
                     self.dash_end_cooldown = 100
+                    self.dash_sound.play()
                     self.screenshake(10)
-                    self.game.circles.append([pygame.Vector2(self.rect.copy().x+4, self.rect.copy().y+16), 255, 2])
+                    for i in range(10):
+                        self.game.circles.append([pygame.Vector2(self.rect.copy().x+4, self.rect.copy().y+16), 255, 2])
+
+            if self.played > 0:
+                self.played -= 1
 
             if keys[pygame.K_SPACE]:
                 if self.airtime < 4 or self.hoz > 2:
                     self.landed = False
                     if self.hoz > 2:
+                        if self.played <= 0:
+                            self.rock_sound.play()
+                            self.played = 40
+                        self.game.dead_particles.append([int(self.rect.x) + random.randrange(-10, 10), int(self.rect.y), 2, (100, 100, 100)])
                         self.offwall = True
                         self.screenshake(2)
                     self.vertical_momentum = -5   
@@ -127,6 +163,13 @@ class Player(Entity):
         self.movement = pygame.Vector2(0, 0)
         self.movement.y += self.vertical_momentum
         self.move(self.game.tiles)
+
+        if self.moving:
+            if self.grass_footstep <= 0 and self.collisions["bottom"]:
+                random.choice(self.grass_sounds).play()
+                self.grass_footstep = 50
+            else:
+                self.grass_footstep -= 1
 
         if self.new_level:
             self.game.current_level += 1
@@ -175,9 +218,9 @@ class Game:
         self.engine = Engine(800, 600, "Game")
         self.assets = Assets("assets")
 
-        self.current_level = 0
-        self.maps = ["map1.bin", "map2.bin", "map3.bin", "map4.bin"]
-        self.start_positions = [(0, 400), (28, 400), (28, 400), (28, 400)]
+        self.current_level = 6
+        self.maps = ["map1.bin", "map2.bin", "map3.bin", "map4.bin", "map5.bin", "map6.bin", "map7.bin"]
+        self.start_positions = [(0, 400), (28, 400), (28, 400), (28, 400), (28, 400), (28, 400), (28, 400)]
 
         self.assets.load_animation("player_idle",  ["player_idle1",
                                                     "player_idle2",
@@ -205,6 +248,15 @@ class Game:
                                                     "bug5",
                                                     "bug6",
                                                     "bug7"])
+
+        self.assets.load_animation("water",  ["water1",
+                                            "water2",
+                                            "water3"])
+
+
+        self.assets.load_animation("water_flow",  ["water_flow1",
+                                            "water_flow2",
+                                            "water_flow3"])
         self.assets.load_animation("player_onwall",  ["player_onwall"])
 
         self.em = EntityManager(self.engine)
@@ -219,6 +271,8 @@ class Game:
         self.marker = self.assets.load_image("maker")
         self.cloud = self.assets.load_image("cloud")
         self.dash_img = self.assets.load_image("player_dash")
+        self.bullet = self.assets.load_image("bullet")
+        self.leaf = self.assets.load_image("leaf")
 
         self.clouds = []
         self.particles = []
@@ -245,12 +299,17 @@ class Game:
             [-1, 1],
             [-1, -1],
         ]
+        self.water_index = 0
         
     async def main(self):
         while True:
             if self.bug_index + 1 >= len(self.assets.bug_flap) * 5:
                 self.bug_index = 0
             self.bug_index += 1
+
+            if self.water_index + 1 >= len(self.assets.water) * 5:
+                self.water_index = 0
+            self.water_index += 1
 
             self.global_time += 1
             self.engine.display.fill((104, 194, 211))
@@ -277,19 +336,23 @@ class Game:
 
             for tile in self.tiles:
                 if math.dist([tile.rect.x, tile.rect.y], [self.player.rect.x, self.player.rect.y]) < 200:
-                    if tile.image.name != "bug1":
-                        self.engine.display.blit(tile.image.surf, (tile.rect.x - self.player.camera.x, tile.rect.y - self.player.camera.y))
-                    
+                    if tile.image.name == "water1":
+                        self.engine.display.blit(self.assets.water[self.water_index // 5].surf, (tile.rect.x - self.player.camera.x, tile.rect.y - self.player.camera.y))
+                    elif tile.image.name == "water_flow1":
+                        self.engine.display.blit(self.assets.water_flow[self.water_index // 5].surf, (tile.rect.x - self.player.camera.x, tile.rect.y - self.player.camera.y))
                     else:
-                        if self.global_time % 60 == 0:
-                            for bul in self.bug_pattern_1:
-                                self.bullets.append([pygame.Vector2(*tile.rect.center), pygame.Vector2(bul[0] * math.sin(self.global_time / 100) * 2, bul[1])])
-                        self.engine.display.blit(self.assets.bug_flap[self.bug_index // 5].surf, (tile.rect.x - self.player.camera.x, tile.rect.y - self.player.camera.y))
+                        if tile.image.name != "bug1":
+                            self.engine.display.blit(tile.image.surf, (tile.rect.x - self.player.camera.x, tile.rect.y - self.player.camera.y))
+                        else:
+                            if self.global_time % 60 == 0:
+                                for bul in self.bug_pattern_1:
+                                    self.bullets.append([pygame.Vector2(*tile.rect.center), pygame.Vector2(bul[0] * math.sin(self.global_time / 100) * 2, bul[1])])
+                            self.engine.display.blit(self.assets.bug_flap[self.bug_index // 5].surf, (tile.rect.x - self.player.camera.x, tile.rect.y - self.player.camera.y))
 
                 if tile.image.name in ("bush1", "bush2"):
-                    if random.randrange(0, 1000) == 2:
+                    if random.randrange(0, 300) == 2:
                         self.particles.append([
-                            pygame.Vector2(tile.rect.copy().x + random.randrange(0, 10), tile.rect.copy().y + random.randrange(0, 10)), 100
+                            pygame.Vector2(tile.rect.copy().x + random.randrange(0, 10), tile.rect.copy().y + random.randrange(0, 10)), 200
                         ])
 
             if random.randrange(0, 2500) == 2:
@@ -307,7 +370,7 @@ class Game:
                 if (particle[1]) < 0:
                     self.particles.remove(particle)
 
-                pygame.draw.rect(self.engine.display, (86, 123, 121), (particle[0].x - self.player.camera.x, particle[0].y - self.player.camera.y, 2, 2))
+                self.engine.display.blit(pygame.transform.rotate(self.leaf.surf, math.sin(self.global_time / 10) * 2), (particle[0].x - self.player.camera.x, particle[0].y - self.player.camera.y))
 
             if not self.player.alive:
                 if not self.player.dead:
@@ -315,6 +378,7 @@ class Game:
                     self.player.dead = True
                     for i in range(20):
                         self.explosions.append([pygame.Vector2(self.player.rect.copy().x+random.randrange(1, 10), self.player.rect.copy().y+random.randrange(2, 10)), pygame.Vector2(random.randrange(-10, 10), random.randrange(5, 10)), 255, 10])
+                    self.player.explosion_sound.play()
 
                 self.engine.display.blit(self.dead_text, (30, 50))
                 self.engine.display.blit(self.restart_text, (30, 84))
@@ -336,12 +400,12 @@ class Game:
                 
                 pygame.draw.circle(self.engine.display, (167, 123, 91, e[2]), (int(e[0].x - self.player.camera.x), int(e[0].y - self.player.camera.y)), e[3], 1)
                 pygame.draw.circle(self.engine.display, (167, 123, 91, e[2]), (int(e[0].x - self.player.camera.x), int(e[0].y - self.player.camera.y)), 5)
-                self.dead_particles.append([int(e[0].x), int(e[0].y), 2])
+                self.dead_particles.append([int(e[0].x), int(e[0].y), 2, (167, 123, 91)])
 
             for p in self.dead_particles:
                 p[2] -= 0.1
                 if p[2] > 0.1:
-                    pygame.draw.circle(self.engine.display, (167, 123, 91), (int(p[0] - self.player.camera.x), int(p[1] - self.player.camera.y)), int(p[2]))
+                    pygame.draw.circle(self.engine.display, p[3], (int(p[0] - self.player.camera.x), int(p[1] - self.player.camera.y)), int(p[2]))
 
             for circle in self.circles:
                 circle[2] += 1
@@ -368,8 +432,7 @@ class Game:
                 if pygame.Rect(bullet[0].x, bullet[0].y, 2, 2).colliderect(self.player.rect):
                     self.player.alive = False
 
-                pygame.draw.circle(self.engine.display, (255, 0, 0, 100), (int(bullet[0].x - self.player.camera.x), int(bullet[0].y - self.player.camera.y)), 6)
-                pygame.draw.circle(self.engine.display, (255, 0, 0), (int(bullet[0].x - self.player.camera.x), int(bullet[0].y - self.player.camera.y)), 2)
+                self.engine.display.blit(self.bullet.surf, (int(bullet[0].x - self.player.camera.x), int(bullet[0].y - self.player.camera.y)))
 
             self.em.update()
             self.engine.handle_event_triggers()
