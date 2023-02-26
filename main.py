@@ -4,11 +4,13 @@ import pickle
 import math
 import random
 import sys
+import datetime
+import time
 
 pygame.init()
 pygame.font.init()
-pygame.mixer.pre_init(frequency=1000)
-# pygame.mixer.init()
+pygame.mixer.pre_init(44100, 16, 2, 4096)
+pygame.mixer.init() 
 
 from scripts.engine import Engine
 from scripts.assets import Assets
@@ -42,6 +44,7 @@ def deserialize(fi, game):
 
 class Player(Entity):
     def __init__(self, game):
+        self.final = False
         self.game = game
         self.camera = pygame.math.Vector2(0, 0)
         self.vertical_momentum = 0
@@ -67,8 +70,13 @@ class Player(Entity):
             self.grass_sounds[1].set_volume(100)
             self.rock_sound = pygame.mixer.Sound("assets/rock.ogg")
 
+
+            self.water_sounds = [pygame.mixer.Sound("assets/water.ogg")]
             self.explosion_sound = pygame.mixer.Sound("assets/explosion.ogg")
             self.explosion_sound.set_volume(0.4)
+
+            self.music = pygame.mixer.Sound("assets/birds.ogg")
+            self.music.play(-1)
         else:
             self.dash_sound = pygame.mixer.Sound("assets/powerUp.wav")
 
@@ -77,8 +85,14 @@ class Player(Entity):
             self.grass_sounds[1].set_volume(100)
             self.rock_sound = pygame.mixer.Sound("assets/rock.wav")
 
+
+            self.water_sounds = [pygame.mixer.Sound("assets/water.wav")]
             self.explosion_sound = pygame.mixer.Sound("assets/explosion.wav")
             self.explosion_sound.set_volume(0.4)
+
+            self.music = pygame.mixer.Sound("assets/birds.wav")
+            self.music.play(-1)
+
 
         self.grass_footstep = 0
         self.played = 0
@@ -86,7 +100,7 @@ class Player(Entity):
 
     def pipe_input(self):
         keys = pygame.key.get_pressed()
-        if self.alive:
+        if self.alive and not self.game.endgame:
             self.moving = False
             if keys[pygame.K_d]:
                 self.movement.x += self.speed
@@ -152,10 +166,11 @@ class Player(Entity):
                     self.offwall = False
 
         else:
-            if keys[pygame.K_RETURN]:
-                self.rect.x, self.rect.y = self.game.start_positions[self.game.current_level]
-                self.alive = True
-                self.dead = False
+            if not self.game.endgame:
+                if keys[pygame.K_RETURN]:
+                    self.rect.x, self.rect.y = self.game.start_positions[self.game.current_level]
+                    self.alive = True
+                    self.dead = False
     def screenshake(self, amount):
         self.screenskake_amount = amount
 
@@ -165,8 +180,11 @@ class Player(Entity):
         self.move(self.game.tiles)
 
         if self.moving:
-            if self.grass_footstep <= 0 and self.collisions["bottom"]:
-                random.choice(self.grass_sounds).play()
+            if self.grass_footstep <= 0 and self.collisions["bottom"] and not self.game.endgame:
+                if not self.in_water:
+                    random.choice(self.grass_sounds).play()
+                else:
+                    random.choice(self.water_sounds).play()
                 self.grass_footstep = 50
             else:
                 self.grass_footstep -= 1
@@ -215,10 +233,10 @@ class Player(Entity):
 
 class Game:
     def __init__(self):
-        self.engine = Engine(800, 600, "Game")
+        self.engine = Engine(800, 600, "Sourze")
         self.assets = Assets("assets")
-
-        self.current_level = 6
+        self.end_trigger = -1
+        self.current_level = 0
         self.maps = ["map1.bin", "map2.bin", "map3.bin", "map4.bin", "map5.bin", "map6.bin", "map7.bin"]
         self.start_positions = [(0, 400), (28, 400), (28, 400), (28, 400), (28, 400), (28, 400), (28, 400)]
 
@@ -300,13 +318,24 @@ class Game:
             [-1, -1],
         ]
         self.water_index = 0
-        
+
+        self.endtext = iter("I've found it, the source!")
+        self.render = ""
+        self.endgame = False
+        self.reveal_char = 0
+
+        self.window = self.assets.load_image("window")
+        self.window_time = False
+        self.window_y = -400
+        self.start_time = -1
+        self.now = -1
     async def main(self):
+        self.start_time = time.time()
         while True:
             if self.bug_index + 1 >= len(self.assets.bug_flap) * 5:
                 self.bug_index = 0
             self.bug_index += 1
-
+            
             if self.water_index + 1 >= len(self.assets.water) * 5:
                 self.water_index = 0
             self.water_index += 1
@@ -332,7 +361,7 @@ class Game:
 
             for cloud in self.clouds:
                 cloud[0] += 1
-                self.engine.display.blit(self.cloud.surf, (cloud[0]-self.player.camera.x * 0.1 , cloud[1]-self.player.camera.y * 0.1))
+                self.engine.display.blit(self.cloud.surf, (cloud[0]-self.player.camera.x * 0.4 , cloud[1]-self.player.camera.y * 0.4))
 
             for tile in self.tiles:
                 if math.dist([tile.rect.x, tile.rect.y], [self.player.rect.x, self.player.rect.y]) < 200:
@@ -379,9 +408,9 @@ class Game:
                     for i in range(20):
                         self.explosions.append([pygame.Vector2(self.player.rect.copy().x+random.randrange(1, 10), self.player.rect.copy().y+random.randrange(2, 10)), pygame.Vector2(random.randrange(-10, 10), random.randrange(5, 10)), 255, 10])
                     self.player.explosion_sound.play()
-
-                self.engine.display.blit(self.dead_text, (30, 50))
-                self.engine.display.blit(self.restart_text, (30, 84))
+                if not self.endgame:
+                    self.engine.display.blit(self.dead_text, (30, 50))
+                    self.engine.display.blit(self.restart_text, (30, 84))
 
 
             for e in self.explosions:
@@ -434,10 +463,49 @@ class Game:
 
                 self.engine.display.blit(self.bullet.surf, (int(bullet[0].x - self.player.camera.x), int(bullet[0].y - self.player.camera.y)))
 
+
+            if self.player.rect.x <= -260 and self.player.rect.y <= 48 and self.current_level == 6:
+                self.endgame = True
+
+                if self.reveal_char <= 0:
+                    try:
+                        self.render += next(self.endtext)
+                        self.reveal_char = 5
+                    except StopIteration:
+                        self.window_time = True
+                if self.player.alive:
+                    self.engine.display.blit(self.small_font.render(self.render, False, (255, 255, 255)), (self.player.rect.x - self.player.camera.x - 90, self.player.rect.y - self.player.camera.y - 50))
+
             self.em.update()
+            if self.endgame:
+                self.moving = False
+                self.bullets = []
+                if self.reveal_char > 0:
+                    self.reveal_char -= 1
+
+                if self.window_time:
+                    window_pos = (self.player.rect.x - self.player.camera.x, self.window_y - self.player.camera.y)
+                    if self.window_y - (self.player.rect.y - self.player.camera.y) < -34:
+                        self.window_y += 5
+                    else:
+                        self.player.alive = False
+                        if not self.player.final:
+                            self.end_trigger = 50
+                            self.player.final = True
+                            self.now = time.time()
+                    self.engine.display.blit(self.window.surf, window_pos)
+
+                if self.end_trigger > 0:
+                    self.end_trigger -= 1
+                if self.end_trigger == 0:
+                    
+                    self.engine.display.blit(self.small_font.render("RIP Jimmy:", False, (255, 255, 255)),  (self.player.rect.x - self.player.camera.x - 90, self.player.rect.y - self.player.camera.y - 50))
+                    self.engine.display.blit(self.small_font.render("Obliterated by a", False, (255, 255, 255)),  (self.player.rect.x - self.player.camera.x - 90, self.player.rect.y - self.player.camera.y - 30))
+                    self.engine.display.blit(self.small_font.render("falling window", False, (255, 255, 255)),  (self.player.rect.x - self.player.camera.x - 90, self.player.rect.y - self.player.camera.y - 10))
+                    self.engine.display.blit(self.small_font.render(f"Time: {datetime.timedelta(seconds=self.now - self.start_time)}", False, (255, 255, 255)),  (self.player.rect.x - self.player.camera.x - 90, self.player.rect.y - self.player.camera.y + 10))
+            
             self.engine.handle_event_triggers()
             self.engine.update()
-            pygame.display.set_caption(f"{self.engine.clock.get_fps()}")
             await asyncio.sleep(0)
 
 asyncio.run(Game().main())

@@ -26,6 +26,7 @@ class Entity:
         self.collisions = {"left": False, "right": False, "bottom": False}
         self.hoz = 0
         self.released = True
+        self.in_water = False
 
     def animate(self):
         if self.img_index + 1 >= len(self.images) * self.anim_time:
@@ -40,8 +41,12 @@ class Entity:
         pass
 
     def get_collisions(self, tiles):
+        self.in_water = False
         return_list = []
         for tile in tiles:
+            if tile.rect.colliderect(self.rect) and tile.image.name in ("water1", "water_flow1"):
+                self.in_water = True
+
             if tile.rect.colliderect(self.rect) and tile.image.name not in ("bush1", "bush2", "tree", "bug1", "water1", "water_flow1"):
                 return_list.append(tile)
 

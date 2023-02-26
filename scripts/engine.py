@@ -17,6 +17,7 @@ class Engine:
         self.zoom = zoom
 
         self.screen = pygame.display.set_mode((self.width, self.height))
+        pygame.display.set_caption(self.title)
         self.display = pygame.Surface((self.width / self.zoom, self.height / self.zoom))
         self.clock = pygame.time.Clock()
         self.fps = fps
